@@ -1,0 +1,71 @@
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+portuguese <- read.csv("student_portuguese_clean.csv")
+math <- read.csv("student_math_clean.csv")
+math$mother_education <- factor(math$mother_education,levels=c("none", "primary education (4th grade)", "5th to 9th grade", "secondary education","higher education"))
+math$father_education <- factor(math$father_education,levels=c("none", "primary education (4th grade)", "5th to 9th grade", "secondary education","higher education"))
+math$average_grade <- colMeans(rbind(math$grade_1,math$grade_2,math$final_grade))
+```
+
+```{r}
+table(math$mother_education)
+table(math$father_education)
+ggplot(math, aes(x = mother_education, y = absences)) +
+  geom_boxplot() +
+  labs(title = "Score Distribution by Occupation", x = "mother_education", y = "absences") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(math, aes(x = father_education, y = absences)) +
+  geom_boxplot() +
+  labs(title = "Score Distribution by Occupation", x = "father_education", y = "absences") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+```
+
+```{r}
+ggplot(math, aes(x = mother_job, y = absences)) +
+  geom_boxplot() +
+  labs(title = "Score Distribution by Occupation", x = "mother_job", y = "absences") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(math, aes(x = father_job, y = absences)) +
+  geom_boxplot() +
+  labs(title = "Score Distribution by Occupation", x = "father_job", y = "absences") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+```
+```{r}
+ggplot(math, aes(x = mother_education, y = average_grade)) +
+  geom_boxplot() +
+  labs(title = "Score Distribution by Occupation", x = "mother_job", y = "final_grade") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(math, aes(x = father_education, y = average_grade)) +
+  geom_boxplot() +
+  labs(title = "Score Distribution by Occupation", x = "father_job", y = "final_grade") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+```
+
+```{r}
+ggplot(math, aes(x = mother_job, y = average_grade)) +
+  geom_boxplot() +
+  labs(title = "Score Distribution by Occupation", x = "mother_job", y = "final_grade") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(math, aes(x = father_job, y = average_grade)) +
+  geom_boxplot() +
+  labs(title = "Score Distribution by Occupation", x = "father_job", y = "final_grade") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+```
+
+
+regression
+```{r}
+math$mother_education_lvl <- as.numeric(math$mother_education)
+math$father_education_lvl <- as.numeric(math$father_education)
+
+math_lm <- lm(average_grade~address_type+parent_status+mother_education_lvl+father_education_lvl+mother_job+father_job+school_choice_reason+study_time+romantic_relationship,math)
+summary(math_lm)
+```
+
