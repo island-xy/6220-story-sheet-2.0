@@ -1,0 +1,415 @@
+---
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(gridExtra)
+library(patchwork)
+library(caTools)
+library(e1071)
+library(caret)
+library(randomForest)
+library(nnet)
+```
+
+```{r}
+df <- read.csv("acoustics_0214.csv")
+dim(df)
+table(df$Group)
+table(df$Tone)
+```
+
+
+the number of different Tone is balanced
+response variable is Tone
+Task 1. (10 min) Compare the features that correspond to the 8 Tones.
+(E.g. Produce representative shapes X1-10 for each Tone. Can control for Gender if needed. Likely need to
+deal with “NA” at this stage.)
+the most important issue is NA. the lowest value of each participant will be use to replace the NA value
+
+
+```{r}
+for (i in names(table(df$Participant))){
+tmp <- df[df$Participant==i,]
+min_tone <- min(na.omit(unlist(tmp[,1:10])))
+tmp[is.na(tmp)] <- min_tone
+df[df$Participant==i,] <- tmp
+}
+colnames(df)[1:10]=1:10
+melt_df=melt(df,id.vars=c("Participant","Group","Gender","Duration","Tone"))
+melt_df$variable = as.numeric(melt_df$variabl)
+melt_df_male=melt_df[melt_df$Gender=="M",]
+melt_df_female=melt_df[melt_df$Gender=="F",]
+```
+
+```{r}
+p1=ggplot(data=melt_df_male[melt_df_male$Tone=="SM_T1",],aes(x=variable,y=value),size=0.1)+
+geom_point(position=position_jitter(width=0.4))+
+geom_smooth(method = "lm",formula=y~poly(x,3),se=F)+
+labs(title = "SM_T1 male")
+p2=ggplot(data=melt_df_female[melt_df_female$Tone=="SM_T1",],aes(x=variable,y=value),size=0.1)+
+geom_point(position=position_jitter(width=0.4))+
+geom_smooth(method = "lm",formula=y~poly(x,3),se=F)+
+labs(title = "SM_T1 female")
+grid.arrange(p1,p2,ncol=2)
+
+```
+
+```{r}
+p1=ggplot(data=melt_df_male[melt_df_male$Tone=="SM_T2",],aes(x=variable,y=value),size=0.1)+
+geom_point(position=position_jitter(width=0.4))+
+geom_smooth(method = "lm",formula=y~poly(x,3),se=F)+
+labs(title = "SM_T2 male")
+
+p2=ggplot(data=melt_df_female[melt_df_female$Tone=="SM_T2",],aes(x=variable,y=value),size=0.1)+
+geom_point(position=position_jitter(width=0.4))+
+geom_smooth(method = "lm",formula=y~poly(x,3),se=F)+
+labs(title = "SM_T2 female")
+
+grid.arrange(p1,p2,ncol=2)
+
+model <- lm(value~variable + I(variable^2) + I(variable^3), data = melt_df_female[melt_df_female$Tone=="SM_T2",])
+summary(model)
+x <- seq(1,10,0.01)
+y <- 218.09556+-34.79307*x+8.7848*(x^2)-0.5523*(x^3)
+plot(x,y)
+```
+
+```{r}
+p1=ggplot(data=melt_df_male[melt_df_male$Tone=="SM_T3",],aes(x=variable,y=value),size=0.1)+
+geom_point(position=position_jitter(width=0.4))+
+geom_smooth(method = "lm",formula=y~poly(x,3),se=F)+
+labs(title = "SM_T3 male")
+p2=ggplot(data=melt_df_female[melt_df_female$Tone=="SM_T3",],aes(x=variable,y=value),size=0.1)+
+geom_point(position=position_jitter(width=0.4))+
+geom_smooth(method = "lm",formula=y~poly(x,3),se=F)+
+labs(title = "SM_T3 female")
+grid.arrange(p1,p2,ncol=2)
+```
+
+```{r}
+p1=ggplot(data=melt_df_male[melt_df_male$Tone=="SM_T4",],aes(x=variable,y=value),size=0.1)+
+geom_point(position=position_jitter(width=0.4))+
+geom_smooth(method = "lm",formula=y~poly(x,3),se=F)+
+labs(title = "SM_T4 male")
+p2=ggplot(data=melt_df_female[melt_df_female$Tone=="SM_T4",],aes(x=variable,y=value),size=0.1)+
+geom_point(position=position_jitter(width=0.4))+
+geom_smooth(method = "lm",formula=y~poly(x,3),se=F)+
+labs(title = "SM_T4 female")
+grid.arrange(p1,p2,ncol=2)
+               
+```
+
+build ml function
+```{r}
+tone_classification <- function(train_data,test_data,ml_type){
+  if(ml_type=="log"){
+    model=multinom(Tone ~ ., data = train_data)
+    pred=predict(model,newdata=test_data,type="class")
+    return(confusionMatrix(pred,test_data$Tone))
+  }
+  if(ml_type=="svm"){
+    svm_model=svm(Tone~., data=train_data, cost=1)
+    pred=predict(svm_model,test_data)
+    return(confusionMatrix(pred,test_data$Tone))
+  }
+  if(ml_type=="rf"){
+    rf_model=randomForest(Tone ~. , data=train_data,)
+    pred=predict(rf_model,test_data,type = "class")
+    confusionMatrix(pred,test_data$Tone)
+  }
+}
+```
+
+scale the data
+```{r}
+scale_value=t(scale(t(df[,1:10])))
+scale_df=df
+scale_df[,1:10]=scale_value
+#remove NA
+scale_df =scale_df[!is.na(scale_df[,1]),]
+```
+
+new variable
+```{r}
+scale_df$new1=NA
+scale_df$new2=NA
+scale_df$new3=NA
+scale_df$new4=NA
+for(i in 1:dim(scale_df)[1]){
+  lm_df= data.frame(y=unlist(scale_df[i,1:10]),x=1:10)
+  model= lm(y~poly(x,degree=3),data=lm_df)
+  scale_df$new1[i]= model$coefficients[1]
+  scale_df$new2[i]= model$coefficients[2]
+  scale_df$new3[i]= model$coefficients[3]
+  scale_df$new4[i]= model$coefficients[4]
+}
+colnames(scale_df)=c("X1","X2","X3","X4","X5","X6","X7","X8","X9","X10","Participant","Group","Gender","Duration","Tone","N1","N2","N3","N4")
+```
+
+
+simplified version
+```{r}
+full_df=scale_df[scale_df$Tone %in% c("CM_T1","CM_T2"),]
+full_df=sim_df[,-c(11,12,13)]
+```
+
+
+accuracy
+
+#logistic
+```{r all variable}
+model=glm(Tone~.,family=binomial(link="logit"),data=train_df)
+tone_test=predict.glm(model,newdata=test_df,type="response")
+tone_test_class=ifelse(tone_test>0.5,"CM_T2","CM_T1")
+mean(tone_test_class==test_df$Tone)
+```
+
+```{r just beta1/2/3/4 }
+model=glm(Tone~.,family=binomial(link="logit"),data=train_df[,-c(1:10)])
+tone_test=predict.glm(model,newdata=test_df[,-c(1:10)],type="response")
+tone_test_class=ifelse(tone_test>0.5,"CM_T2","CM_T1")
+mean(tone_test_class==test_df$Tone)
+```
+
+#svm
+```{r}
+svm_model=svm(Tone~., data=train_df, cost=1)
+pred=predict(svm_model,test_df)
+confusionMatrix(pred,test_df$Tone)
+```
+
+```{r}
+svm_model=svm(Tone~., data=train_df[,-c(1:10)], cost=1)
+pred=predict(svm_model,test_df[,-c(1:10)])
+confusionMatrix(pred,test_df$Tone)
+```
+
+#random forest
+```{r}
+train_df_rf=train_df
+colnames(train_df_rf)=c("X1","X2","X3","X4","X5","X6","X7","X8","X9","X10","Duration","Tone","N1","N2","N3","N4")
+
+test_df_rf=test_df
+colnames(test_df_rf)=c("X1","X2","X3","X4","X5","X6","X7","X8","X9","X10","Duration","Tone","N1","N2","N3","N4")
+
+rf_model=randomForest(Tone ~. , data=train_df_rf,)
+pred=predict(rf_model,test_df_rf,type = "class")
+confusionMatrix(pred,test_df_rf$Tone)
+```
+
+
+
+#after adding new variable which represent the trend of tones, there is not significant accuracy change.
+#aplly it on multiply classification problem
+full version
+```{r}
+full_df=scale_df
+full_df=full_df[,-c(11,12,13)]
+full_df$Tone=factor(full_df$Tone)
+```
+##########
+logistic
+```{r}
+split=sample.split(full_df$Tone,0.7)
+train_df=subset(full_df,split==T)
+test_df=subset(full_df,split==F)
+```
+
+accuracy
+
+#logistic
+```{r all variable}
+model=multinom(Tone ~ ., data = train_df)
+tone_test=predict(model,newdata=test_df,type="class")
+mean(tone_test==test_df$Tone)
+```
+
+```{r just beta1/2/3/4 }
+model=multinom(Tone ~ ., data = train_df[,-c(1:10)])
+tone_test=predict(model,newdata=test_df[,-c(1:10)],type="class")
+mean(tone_test==test_df$Tone)
+```
+
+#svm
+```{r}
+svm_model=svm(Tone~., data=train_df, cost=1)
+pred=predict(svm_model,test_df)
+confusionMatrix(pred,test_df$Tone)
+```
+
+```{r}
+svm_model=svm(Tone~., data=train_df[,-c(1:10)], cost=1)
+pred=predict(svm_model,test_df[,-c(1:10)])
+confusionMatrix(pred,test_df$Tone)
+```
+
+#random forest
+```{r}
+train_df_rf=train_df
+colnames(train_df_rf)=c("X1","X2","X3","X4","X5","X6","X7","X8","X9","X10","Duration","Tone","N1","N2","N3","N4")
+
+test_df_rf=test_df
+colnames(test_df_rf)=c("X1","X2","X3","X4","X5","X6","X7","X8","X9","X10","Duration","Tone","N1","N2","N3","N4")
+
+rf_model=randomForest(Tone ~. , data=train_df_rf,)
+pred=predict(rf_model,test_df_rf,type = "class")
+confusionMatrix(pred,test_df_rf$Tone)
+
+```
+
+```{r}
+
+rf_model=randomForest(Tone ~. , data=train_df_rf[,-c(13:16)],)
+pred=predict(rf_model,test_df_rf[,-c(13:16)],type = "class")
+confusionMatrix(pred,test_df_rf$Tone)
+```
+#adding additional variable doesn't significantly increase accuracy
+
+#given a specify language, whether we can classify different tones?
+```{r}
+CM_df=scale_df[scale_df$Group=="CM",-c(11,12,13)]
+SM_df=scale_df[scale_df$Group=="SM",-c(11,12,13)]
+CM_df$Tone=factor(CM_df$Tone)
+SM_df$Tone=factor(SM_df$Tone)
+
+CM_split=sample.split(CM_df$Tone,0.7)
+CM_train_df=subset(CM_df,CM_split==T)
+CM_test_df=subset(CM_df,CM_split==F)
+
+SM_split=sample.split(SM_df$Tone,0.7)
+SM_train_df=subset(SM_df,SM_split==T)
+SM_test_df=subset(SM_df,SM_split==F)
+```
+
+```{r}
+tone_classification(CM_train_df,CM_test_df,ml="svm")
+```
+
+```{r}
+tone_classification(SM_train_df,SM_test_df,ml="svm")
+```
+
+
+```{r}
+tone_classification(CM_train_df,CM_test_df,ml="log")
+```
+
+```{r}
+tone_classification(SM_train_df,SM_test_df,ml="log")
+```
+
+```{r}
+tone_classification(CM_train_df,CM_test_df,ml="rf")
+```
+
+```{r}
+tone_classification(SM_train_df,SM_test_df,ml="rf")
+```
+
+
+
+strategy: given a sentence, we should firstly identify the language. We can't identify the language type by just one single word, we need a whole sentence to classify.
+
+use random forest because of high accuracy
+
+1.create pseudo-sentence (11 word each sentence)
+
+2.get the probability that identify correct language by using one sentence
+
+3.re-classify the tone given known language
+
+
+create pseudo-sentence
+```{r pseudo-sentence}
+CM_df=scale_df[scale_df$Group=="CM",-c(11,12,13)]
+SM_df=scale_df[scale_df$Group=="SM",-c(11,12,13)]
+CM_df$Tone=factor(CM_df$Tone)
+SM_df$Tone=factor(SM_df$Tone)
+
+CM_split=sample.split(CM_df$Tone,0.7)
+CM_train_df=subset(CM_df,CM_split==T)
+CM_test_df=subset(CM_df,CM_split==F)
+
+SM_split=sample.split(SM_df$Tone,0.7)
+SM_train_df=subset(SM_df,SM_split==T)
+SM_test_df=subset(SM_df,SM_split==F)
+
+
+CM_list <- vector("list", 100)
+SM_list <- vector("list", 100)
+for(i in 1:100){
+  CM_list[[i]] <- CM_test_df[sample(nrow(CM_test_df), 11), ]
+  SM_list[[i]] <- SM_test_df[sample(nrow(SM_test_df), 11), ]
+}
+```
+
+
+get the probability that identify correct language by using one sentence
+```{r rf model (full)}
+rf_model_full=randomForest(Tone ~. , data=rbind(CM_train_df,SM_train_df))
+```
+
+```{r rf model (CM)}
+rf_model_CM=randomForest(Tone ~. , data=CM_train_df)
+```
+
+```{r rf model (SM)}
+rf_model_SM=randomForest(Tone ~. , data=SM_train_df)
+```
+
+```{r identify language function}
+language_identify <- function(df){
+  pred=predict(rf_model_full,df,type = "class")
+  CM_count <- sum(pred %in% c("CM_T1", "CM_T2", "CM_T3", "CM_T4"))
+  SM_count <- sum(pred %in% c("SM_T1", "SM_T2", "SM_T3", "SM_T4"))
+  return(ifelse(SM_count>CM_count,"SM","CM"))
+}
+```
+
+```{r}
+CM_result <- rep(NA,100)
+for(i in 1:100){
+  df <- CM_list[[i]]
+  CM_result[i] <- language_identify(df)
+}
+CM_result
+```
+
+```{r}
+SM_result <- rep(NA,100)
+for(i in 1:100){
+  df <- SM_list[[i]]
+  SM_result[i] <- language_identify(df)
+}
+SM_result
+```
+
+It is easy to identify the language type by using a whole sentence instead of one single word.
+
+re-classify the tone given known language
+```{r}
+CM_accuracy <- rep(NA,100)
+for(i in 1:100){
+  df <- CM_list[[i]]
+  pred=predict(rf_model_CM,df,type = "class")
+  CM_accuracy[i] <- mean(pred==df$Tone)
+}
+mean(CM_accuracy)
+```
+
+```{r}
+SM_accuracy <- rep(NA,100)
+for(i in 1:100){
+  df <- SM_list[[i]]
+  pred=predict(rf_model_SM,df,type = "class")
+  SM_accuracy[i] <- mean(pred==df$Tone)
+}
+mean(SM_accuracy)
+```
